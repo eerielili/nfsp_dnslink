@@ -1,0 +1,57 @@
+#!/bin/perl -wT
+use warnings;
+use strict;
+use WebService::NFSN;
+
+my $Username = '';
+my @Records =();
+my $ApiKey= '';
+my $AccountId = '';
+my $IpfsHash = $ARGV[0] or
+	die "You need to provide a CID to update the dnslink TXT record.\n";
+my $Domain = $ARGV[1] or
+	die "You need to provide a valid domain name for the NFSN API\n";
+my $SubDomain = $ARGV[2];
+my $RRName = "_dnslink";
+my $nfsn = WebService::NFSN->new($Username, $ApiKey);
+my $dns = $nfsn->dns($Domain) or die "Connection error or provide a valid domain\n";
+$dns->minTTL(60);
+
+if (not defined $SubDomain){
+	@Records = $dns->listRRs(name => $RRName);
+}
+else{
+	@Records = $dns->listRRs(name => "$RRName.$SubDomain");
+	$RRName = "$RRName.$SubDomain";
+}
+
+my $DnsLinkData =  $Records[0][0]->{data};
+if (not defined $DnsLinkData){
+	print "Adding dnslink data...";
+	$dns->addRR(name => "$RRName", type => 'TXT', data => "dnslink=/ipfs/$IpfsHash", ttl => 60);
+
+}
+else{
+	if (not defined $SubDomain){
+		print "Current data for _dnslink.$Domain is : $DnsLinkData\n";
+	}
+	else{
+		print "Current data for _dnslink.$SubDomain.$Domain is : $DnsLinkData\n";
+
+	}
+
+	print "Updating dnslink TXT record...\n";
+	$dns->removeRR(name => "$RRName", type => 'TXT', data => "$DnsLinkData");
+	$dns->addRR(name => "$RRName", type => 'TXT', data => "dnslink=/ipfs/$IpfsHash", ttl => 60);
+}
+
+
+my $LastError = $nfsn->last_response->decoded_content;
+chomp $LastError;
+
+if($LastError =~ /^([\w0-9])$/){
+	die "\nDernière réponse en erreur de l'API:\n$LastError\n";
+}
+else{
+       print "\nThe DNS records have been updated. The new dnslink data should be : dnslink=/ipfs/$IpfsHash\n";
+}
